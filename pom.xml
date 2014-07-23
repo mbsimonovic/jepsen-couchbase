@@ -36,6 +36,33 @@
         <slf4j.version>1.5.10</slf4j.version>
     </properties>
 
+    <profiles>
+        <profile>
+            <!--to run type: mvn test -Pcouch-timeout -->
+            <id>couch-timeout</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>${exec.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <phase>test</phase>
+                                <goals>
+                                    <goal>java</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <mainClass>com.milansimonovic.jepsen.CouchTimeoutTest</mainClass>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
     <developers>
         <developer>
             <id>milan</id>
