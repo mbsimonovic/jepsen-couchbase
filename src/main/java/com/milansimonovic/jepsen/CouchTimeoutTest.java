@@ -61,9 +61,9 @@ public class CouchTimeoutTest {
     private String addElementToArray(Integer nextVal, int numAttempts) {
         long start = System.currentTimeMillis();
         for (int i = 0; i < numAttempts; i++) {
-            CASValue<Object> casValue = client.gets(key);
-            String updatedValue = appendElement(casValue.getValue().toString(), nextVal);
             try {
+                CASValue<Object> casValue = client.gets(key);
+                String updatedValue = appendElement(casValue.getValue().toString(), nextVal);
                 final CASResponse casResponse = client.cas(key, casValue.getCas(), updatedValue);
                 switch (casResponse) {
                     case OK:
