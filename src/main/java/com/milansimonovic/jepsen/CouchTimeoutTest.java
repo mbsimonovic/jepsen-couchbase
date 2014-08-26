@@ -8,7 +8,10 @@ import com.google.gson.JsonPrimitive;
 import net.spy.memcached.CASResponse;
 import net.spy.memcached.CASValue;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -24,9 +27,12 @@ public class CouchTimeoutTest {
     final AtomicInteger nextValue = new AtomicInteger(1);
     final Cluster cluster;
     final CouchbaseClient client;
-    protected final String NODE = "192.168.1.128";
-    protected final String BUCKET = "default";
-    protected final int timeoutMillis = 10000;
+    final String NODE = "192.168.1.128";
+    final String BUCKET = "default";
+    final int timeoutMillis = 10000;
+    final int numAttempts = 10;
+    int total;
+    protected final Set<Integer> acknowledgedWrites = Collections.synchronizedSet(new HashSet<Integer>(200));
 
     public CouchTimeoutTest() {
         cluster = new Cluster.Builder().addToLeft(NODE).build();
@@ -44,15 +50,51 @@ public class CouchTimeoutTest {
         setEmptyDocument();
         appendToDocument(50);
         cluster.uniDirectionalPartition();
-        cluster.scheduleHealAndShutdownIn(15);
-        //sleep while the node recovers?
+        cluster.scheduleHealAndCloseConnectionIn(15);
         appendToDocument(150);
+        collectResults();
         client.shutdown();
         log.info("DONE!");
     }
 
+    private void collectResults() {
+        CASValue<Object> casValue = client.gets(key);
+        final JsonElement el = new JsonParser().parse(casValue.getValue().toString());
+        final JsonArray elements = el.getAsJsonObject().getAsJsonArray("elements");
+        Set<Integer> saved = new HashSet<>();
+        for (int i = 0; i < elements.size(); i++) {
+            saved.add(elements.get(i).getAsInt());
+        }
+        Set<Integer> survivors = new HashSet<>(acknowledgedWrites);
+        survivors.retainAll(saved);
+        Set<Integer> lost = new HashSet<>(acknowledgedWrites);
+        lost.removeAll(survivors);
+        Set<Integer> unacked = new HashSet<>(saved);
+        unacked.removeAll(acknowledgedWrites);
+
+        log.info(total + " total");
+        log.info(acknowledgedWrites.size() + " acknowledged");
+        log.info(survivors.size() + " survivors");
+        if (!lost.isEmpty()) {
+            log.info(lost.size() + " acknowledged writes lost!");
+            log.info(lost);
+        }
+        if (!unacked.isEmpty()) {
+            log.info(unacked.size() + " unacknowledged writes found!");
+            log.info(unacked);
+        }
+        log.info((double) acknowledgedWrites.size() / total + " ack rate");
+        if (!lost.isEmpty()) {
+            log.info((double) lost.size() / acknowledgedWrites.size() + " loss rate");
+        }
+//        if (!unacked.isEmpty()) {
+        //this rate doesn't seem correct
+//            log.info((double)unacked.size() / acknowledgedWrites.size() + " unacknowledged but successful rate" );
+//        }
+    }
+
     /**
-     * Tries to append the element N times
+     * Tries to append <code>nextVal</code> <code>numAttempts</code> times
      *
      * @param nextVal
      * @param numAttempts
@@ -68,6 +110,7 @@ public class CouchTimeoutTest {
                 switch (casResponse) {
                     case OK:
                         log.info("added " + nextVal + " in " + (System.currentTimeMillis() - start));
+                        acknowledgedWrites.add(nextVal);
                         return updatedValue;
                     case EXISTS:
                         log.debug("retrying " + nextVal);
@@ -88,9 +131,9 @@ public class CouchTimeoutTest {
             } catch (RuntimeException ex) {
                 if (ex.getCause() instanceof TimeoutException) {
                     log.error("timed out adding " + nextVal);
+                } else {
+                    log.error("error trying to add " + nextVal, ex);
                 }
-                log.error("error adding " + nextVal, ex);
-                return null;
             }
         }
         log.error("failed to append " + nextVal + " in " + numAttempts + " attempts");
@@ -99,8 +142,9 @@ public class CouchTimeoutTest {
 
     private void appendToDocument(int elementsToAdd) {
         for (int i = 0; i < elementsToAdd; i++) {
-            addElementToArray(nextValue.getAndIncrement(), 10);
+            addElementToArray(nextValue.getAndIncrement(), numAttempts);
         }
+        total += elementsToAdd;
     }
 
     private String appendElement(String json, Integer nextVal) {

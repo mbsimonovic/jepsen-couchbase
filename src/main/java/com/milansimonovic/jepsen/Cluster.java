@@ -15,7 +15,7 @@ public class Cluster {
         Cluster c = new Cluster();
         c.getHealthy();
         c.uniDirectionalPartition();
-        c.scheduleHealAndShutdownIn(1);
+        c.scheduleHealAndCloseConnectionIn(1);
     }
 
     static class Builder {
@@ -88,7 +88,7 @@ public class Cluster {
         log.info("healing partition - DONE");
     }
 
-    public void scheduleHealAndShutdownIn(int seconds) {
+    public void scheduleHealAndCloseConnectionIn(int seconds) {
         final Timer timer = new Timer("healer", true);
         timer.schedule(new TimerTask() {
             @Override

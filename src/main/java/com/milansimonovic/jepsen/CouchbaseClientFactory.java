@@ -31,7 +31,7 @@ public class CouchbaseClientFactory {
 
         CouchbaseConnectionFactoryBuilder builder = new CouchbaseConnectionFactoryBuilder();
         builder.setOpTimeout(timeoutMillis);//2.5 by default
-        builder.setObsTimeout(timeoutMillis);
+//        builder.setObsTimeout(timeoutMillis);
         try {
             client = new CouchbaseClient(builder.buildCouchbaseConnection(nodesList, bucketName, password));
         } catch (Exception e) {
